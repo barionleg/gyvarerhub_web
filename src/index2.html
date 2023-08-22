@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <script src="inc/lib/hub/mqtt.min.js"></script>
+  <script src="inc/lib/hub/bt.js"></script>
+  <script src="inc/lib/hub/serial.js"></script>
+  <script src="inc/lib/hub/utils.js"></script>
+  <script src="inc/lib/hub/conn_bt.js"></script>
+  <script src="inc/lib/hub/conn_http.js"></script>
+  <script src="inc/lib/hub/conn_mqtt.js"></script>
+  <script src="inc/lib/hub/conn_serial.js"></script>
+  <script src="inc/lib/hub/conn_ws.js"></script>
+  <script src="inc/lib/hub/device.js"></script>
+  <script src="inc/lib/hub/GyverHub.js"></script>
+
+  <script src="qs.min.js"></script>
+</head>
+
+<body>
+  <script>
+    if (localStorage.hasOwnProperty('devices')) {
+      hub.import(localStorage.getItem('devices'));
+    }
+    // hub.http.fetch('http://192.168.1.150/hub/fetch?path=/fs/lorem.txt', (p) => console.log(p))
+    // .then(r=>console.log(r))
+    // .catch(e => console.log(e));
+
+  </script>
+</body>
+
+</html>

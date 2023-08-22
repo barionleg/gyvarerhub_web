@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <style>
+    html,
+    body {
+      padding: 0;
+      margin: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .cont {
+      width: 300px;
+      margin: auto;
+      height: 100%;
+      background: #d5d5d5;
+    }
+
+    .row {
+      display: flex;
+      min-height: 50px;
+    }
+
+    .widget {
+      display: inline-block;
+      box-sizing: border-box;
+      height: 100%;
+      background: #a9a9a9;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="cont" class="cont"></div>
+
+  <script>
+    function EL(id) {
+      return document.getElementById(id);
+    }
+    function newRow() {
+      EL('cont').innerHTML += `
+      <div id='test' class='row'></div>
+      `;
+    }
+    function endRow() {
+
+    }
+    function widget(w, h = 50) {
+      EL('test').innerHTML += `
+      <div class='widget' style='width:${w}%;min-height:${h}px'></div>
+      `;
+    }
+
+    newRow();
+    widget(25, 100);
+    widget(25);
+    widget(25);
+  </script>
+</body>
+
+</html>
