@@ -1,4 +1,5 @@
 // ============== VARS =================
+const oninput_prd = 10;
 let focused = null;
 let touch = 0;
 let pressId = null;
@@ -10,7 +11,6 @@ let joys = {};
 let prompts = {};
 let confirms = {};
 let oninp_buffer = {};
-let files = [];
 
 let wid_row_id = null;
 let wid_row_count = 0;
@@ -19,7 +19,43 @@ let btn_row_id = null;
 let btn_row_count = 0;
 let dis_scroll_f = false;
 
+// ================== POST ==================
+function post(cmd, name = '', value = '') {
+  if (focused) hub.post(focused, cmd, name, value);
+}
+function click_h(name, dir) {
+  pressId = (dir == 1) ? name : null;
+  post('set', name, dir);
+}
+function set_h(name, value = '') {
+  post('set', name, value);
+}
+function input_h(name, value) {
+  if (!(name in oninp_buffer)) oninp_buffer[name] = { value: null, tout: null };
+
+  if (!oninp_buffer[name].tout) {
+    set_h(name, value);
+    oninp_buffer[name].tout = setTimeout(() => {
+      if (oninp_buffer[name] && oninp_buffer[name].value != null) {
+        set_h(name, oninp_buffer[name].value);
+      }
+      delete oninp_buffer[name];
+    }, oninput_prd);
+  } else {
+    oninp_buffer[name].value = value;
+  }
+}
+function reboot_h() {
+  post('reboot');
+}
+function release_all() {
+  if (pressId) post('set', pressId, 0);
+  pressId = null;
+}
+
+// ================== SHOW ==================
 function showControls(controls, from_buffer = false, conn = Conn.NONE, ip = 'unset') {
+  hub.dev(focused).resetFiles();
   EL('controls').style.visibility = 'hidden';
   EL('controls').innerHTML = '';
   if (!controls) return;
@@ -31,14 +67,15 @@ function showControls(controls, from_buffer = false, conn = Conn.NONE, ip = 'uns
   prompts = {};
   confirms = {};
   dup_names = [];
-  files = [];
+  
   wid_row_count = 0;
   btn_row_count = 0;
   wid_row_id = null;
   btn_row_id = null;
+  addMenu(null);
 
   for (ctrl of controls) {
-    if (hub.devinf(focused).show_names && ctrl.name) ctrl.label = ctrl.name;
+    if (hub.dev(focused).info.show_names && ctrl.name) ctrl.label = ctrl.name;
     ctrl.wlabel = ctrl.label ? ctrl.label : ctrl.type;
     ctrl.clabel = (ctrl.label && ctrl.label != '_no') ? ctrl.label : ctrl.type;
     ctrl.clabel = ctrl.clabel.charAt(0).toUpperCase() + ctrl.clabel.slice(1);
@@ -84,7 +121,7 @@ function showControls(controls, from_buffer = false, conn = Conn.NONE, ip = 'uns
       case 'table': addTable(ctrl); break;
     }
   }
-  if (hub.devinf(focused).show_names) {
+  if (hub.dev(focused).info.show_names) {
     let labels = document.querySelectorAll(".widget_label");
     for (let lbl of labels) lbl.classList.add('widget_label_name');
   }
@@ -111,14 +148,10 @@ async function renderElms(from_buffer) {
       showPickers();
       showJoys();
       EL('controls').style.visibility = 'visible';
-      if (!from_buffer) nextFile();
+      if (!from_buffer) hub.dev(focused).fetchNextFile();
       break;
     }
   }
-}
-function release_all() {
-  if (pressId) post(focused, 'set', pressId, 0);
-  pressId = null;
 }
 
 // ============ COMPONENTS =============
@@ -213,27 +246,27 @@ function addTabs(ctrl) {
 // menu
 function addMenu(ctrl) {
   let inner = '';
-  let labels = ctrl.text.toString().split(',');
-  for (let i in labels) {
-    let sel = (i == ctrl.value) ? 'menu_act' : '';
-    inner += `<div onclick="menuClick(${i})" class="menu_item ${sel}">${labels[i]}</div>`;
+  let labels = [];
+  if (ctrl != null) {
+    labels = ctrl.text.toString().split(',');
+    for (let i in labels) {
+      let sel = (i == ctrl.value) ? 'menu_act' : '';
+      inner += `<div onclick="menuClick(${i})" class="menu_item ${sel}">${labels[i].trim()}</div>`;
+    }
   }
-  document.querySelector(':root').style.setProperty('--menu_h', ((labels.length + 2) * 35 + 10) + 'px');
+  document.querySelector(':root').style.setProperty('--menu_h', ((labels.length + 3) * 35 + 10) + 'px');
   EL('menu_user').innerHTML = inner;
 }
 function menuClick(num) {
   menu_show(0);
   menuDeact();
-  if (screen != 'device') show_screen('device');
+  if (screen != 'ui') show_screen('ui');
   set_h('_menu', num);
 }
 function menuDeact() {
-  let els = document.getElementById('menu_user').children;
-  for (let el in els) {
-    if (els[el].tagName == 'DIV') els[el].classList.remove('menu_act');
-  }
-  EL('menu_info').classList.remove('menu_act');
-  EL('menu_fsbr').classList.remove('menu_act');
+  let els = Array.from(document.getElementById('menu_user').children).filter(el => el.tagName == 'DIV');
+  els.push(EL('menu_info'), EL('menu_fsbr'), EL('menu_ota'));
+  for (let el in els) els[el].classList.remove('menu_act');
 }
 
 // input
@@ -1093,7 +1126,7 @@ function addImage(ctrl) {
   checkWidget(ctrl);
   endButtons();
   let inner = `
-    <div class="image_t" name="${ctrl.value}" id="#${ctrl.name}">${waiter()}</div>
+    <div class="image_t" data-path="${ctrl.value}" id="#${ctrl.name}">${waiter()}</div>
     `;
   if (wid_row_id) {
     addWidget(ctrl.tab_w, ctrl.name, ctrl.wlabel, inner);
@@ -1104,7 +1137,7 @@ function addImage(ctrl) {
     </div>
     `;
   }
-  files.push({ id: '#' + ctrl.name, path: ctrl.value, type: 'img' });
+  hub.dev(focused).addFile(ctrl.name, ctrl.value, 'img');
 }
 function addStream(ctrl, conn, ip) {
   checkWidget(ctrl);
@@ -1156,7 +1189,7 @@ function checkWidget(ctrl) {
 function beginWidgets(ctrl = null, check = false) {
   if (!check) endButtons();
   wid_row_size = 0;
-  if (devices[focused].break_widgets) return;
+  if (hub.dev(focused).info.break_widgets) return;
   let st = (ctrl && ctrl.height) ? `style="height:${ctrl.height}px"` : '';
   wid_row_id = 'widgets_row#' + wid_row_count;
   wid_row_count++;
@@ -1190,7 +1223,7 @@ function addWidget(width, name, label, inner, height = 0, noback = false) {
 }
 
 // ================ UTILS =================
-function showNotif(text, name) {
+function showNotif(name, text) {
   if (!("Notification" in window) || Notification.permission != 'granted') return;
   let descr = name + ' (' + new Date(Date.now()).toLocaleString() + ')';
   navigator.serviceWorker.getRegistration().then(function (reg) {
@@ -1214,77 +1247,4 @@ function formatToStep(val, step) {
 function scrollDown() {
   let logs = document.querySelectorAll(".c_log");
   logs.forEach((log) => log.scrollTop = log.scrollHeight);
-}
-function parseCSV(str) {
-  // https://stackoverflow.com/a/14991797
-  const arr = [];
-  let quote = false;
-  for (let row = 0, col = 0, c = 0; c < str.length; c++) {
-    let cc = str[c], nc = str[c + 1];
-    arr[row] = arr[row] || [];
-    arr[row][col] = arr[row][col] || '';
-    if (cc == '"' && quote && nc == '"') { arr[row][col] += cc; ++c; continue; }
-    if (cc == '"') { quote = !quote; continue; }
-    if (cc == ',' && !quote) { ++col; continue; }
-    if (cc == '\r' && nc == '\n' && !quote) { ++row; col = 0; ++c; continue; }
-    if (cc == '\n' && !quote) { ++row; col = 0; continue; }
-    if (cc == '\r' && !quote) { ++row; col = 0; continue; }
-    arr[row][col] += cc;
-  }
-  return arr;
-}
-
-// ================ DOWNLOAD =================
-function nextFile() {
-  if (!files.length) return;
-  fetch_to_file = true;
-  if (devices_t[focused].conn == Conn.WS && devices_t[focused].http_cfg.download && files[0].path.startsWith(devices_t[focused].http_cfg.path)) {
-    downloadFile();
-    EL('wlabel' + files[0].id).innerHTML = ' [fetch...]';
-  } else {
-    fetch_path = files[0].path;
-    post('fetch', fetch_path);
-  }
-}
-function downloadFile() {
-  fetching = focused;
-  var xhr = new XMLHttpRequest();
-  xhr.responseType = 'blob';
-  xhr.open('GET', 'http://' + devices[focused].ip + ':' + http_port + files[0].path);
-  xhr.onprogress = function (e) {
-    processFile(Math.round(e.loaded * 100 / e.total));
-  };
-  xhr.onloadend = function (e) {
-    if (e.loaded && e.loaded == e.total) {
-      processFile(100);
-      var reader = new FileReader();
-      reader.readAsDataURL(xhr.response);
-      reader.onloadend = function () {
-        downloadFileEnd(this.result.split('base64,')[1]);
-      }
-    } else {
-      errorFile();
-    }
-  }
-  xhr.send();
-}
-function downloadFileEnd(data) {
-  switch (files[0].type) {
-    case 'img':
-      EL(files[0].id).innerHTML = `<img style="width:100%" src="data:${getMime(files[0].path)};base64,${data}">`;
-      if (EL('wlabel' + files[0].id)) EL('wlabel' + files[0].id).innerHTML = '';
-      break;
-  }
-  files.shift();
-  nextFile();
-  fetching = null;
-  stopFS();
-}
-function processFile(perc) {
-  if (EL('wlabel' + files[0].id)) EL('wlabel' + files[0].id).innerHTML = ` [${perc}%]`;
-}
-function errorFile() {
-  if (EL('wlabel' + files[0].id)) EL('wlabel' + files[0].id).innerHTML = ' [error]';
-  files.shift();
-  nextFile();
 }

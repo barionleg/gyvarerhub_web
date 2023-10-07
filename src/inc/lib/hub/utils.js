@@ -24,6 +24,86 @@ const Modules = {
   RENAME: (1 << 11)
 };
 
+// http
+function http_get(url) {
+  return new Promise((res, rej) => {
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState == 4) {
+          if (xhr.status == 200) res(xhr.responseText);
+          else rej("Error");
+        }
+      }
+      xhr.ontimeout = () => rej("Timeout");
+      xhr.onerror = () => rej("Error");
+      xhr.timeout = this.tout;
+      xhr.open('GET', url, true);
+      xhr.send();
+    } catch (e) {
+      rej(e);
+    }
+  });
+}
+
+function http_fetch(url, onprogress) {
+  return new Promise((res, rej) => {
+    onprogress(0);
+    var xhr = new XMLHttpRequest();
+    xhr.onprogress = (e) => {
+      onprogress(Math.round(e.loaded * 100 / e.total));
+    };
+    xhr.onloadend = (e) => {
+      if (e.loaded && e.loaded == e.total) res(xhr.responseText);
+      else rej(xhr.responseText);
+    }
+    xhr.timeout = this.tout;
+    xhr.ontimeout = () => rej("Timeout");
+    xhr.open('GET', url, true);
+    xhr.send();
+  });
+}
+
+function http_fetch_blob(url, onprogress) {
+  return new Promise((res, rej) => {
+    onprogress(0);
+    var xhr = new XMLHttpRequest();
+    xhr.responseType = 'blob';
+    xhr.onprogress = (e) => {
+      onprogress(Math.round(e.loaded * 100 / e.total));
+    };
+    xhr.onloadend = (e) => {
+      if (e.loaded && e.loaded == e.total && xhr.status == 200) {
+        var reader = new FileReader();
+        reader.readAsDataURL(xhr.response);
+        reader.onloadend = () => res(reader.result.split('base64,')[1]);
+      } else {
+        xhr.response.text()
+          .then(res => rej(res))
+          .catch(e => { })
+      }
+    }
+    xhr.timeout = this.tout;
+    xhr.ontimeout = () => rej("Timeout");
+    xhr.open('GET', url, true);
+    xhr.send();
+  });
+}
+
+function http_post(url, data) {
+  return new Promise((res, rej) => {
+    let xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState == 4) {
+        if (xhr.status == 200) res(xhr.responseText);
+        else rej(xhr.responseText);
+      }
+    }
+    xhr.open('POST', url, true);
+    xhr.send(data);
+  });
+}
+
 // ip
 function checkIP(ip) {
   return Boolean(ip.match(/^((25[0-5]|(2[0-4]|1[0-9]|[1-9]|)[0-9])(\.(?!$)|$)){4}$/));
@@ -60,6 +140,8 @@ function getIPs(ip, netmask) {
   }
   return ips;
 }
+
+// fetch + timeout
 /*async function fetchT(url, options = {}, tout = 5000) {
   const controller = new AbortController();
   const t_id = setTimeout(() => controller.abort(), tout);
@@ -67,11 +149,3 @@ function getIPs(ip, netmask) {
   clearTimeout(t_id);
   return response;
 }*/
-
-// log
-function log(text) {
-  console.log('Log: ' + text);
-}
-function err(text) {
-  console.log('Error: ' + text);
-}

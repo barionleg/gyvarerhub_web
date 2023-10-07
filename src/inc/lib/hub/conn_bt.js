@@ -1,62 +1,55 @@
-class BTconn {
-  onConnChange(state) { }
-  getName() { return this.bt.getName(); }
+class BTconn extends Discover {
+  tout = 1000;
 
-  bt = new BluetoothJS();
-  discovering = false;
+  onConnChange(state) { }
+  getName() {
+    return this.bt.getName();
+  }
 
   constructor(hub) {
-    this._hub = hub;
-    this.bt.onopen = () => this.onConnChange('open');
-    this.bt.onclose = () => this.onConnChange('close');
-    this.bt.onerror = (e) => {
-      this.err(e);
-      this.onConnChange('error');
+    super(hub);
+    this.buf = new PacketBuffer(hub, Conn.BT, true);
+    this.bt = new BluetoothJS();
+    this.bt.onopen = () => {
+      this.log('Connected');
+      this.onConnChange('open');
     }
-    this.bt.onmessage = (data) => {
-      let dev = this._devbt();
-      if (dev) dev.checkPacket(Conn.BT, data);
+    this.bt.onclose = () => {
+      this.log('Disconnected');
+      this.onConnChange('close');
     }
+    this.bt.onerror = (e) => this.err(e);
+    this.bt.onmessage = (data) => this.buf.process(data);
   }
-  discover() {
-    if (this.discovering) return;
-    let dev = this._devbt();
-    if (dev) this.send(dev.info.prefix + '/' + dev.info.id);
-    this._discoverFlag();
+  async discover() {
+    if (this.discovering || !this.bt.state()) return;
+    for (let pref of this._hub._preflist()) await this.send(pref);
+    this._discoverTimer(this.tout);
   }
-  discover_all() {
-    if (this.discovering) return;
-    this.discover();
-    this._discoverFlag();
+  async discover_all() {
+    if (this.discovering || !this.bt.state()) return;
+    await this.send(this._hub.cfg.prefix);
+    this._discoverTimer(this.tout);
   }
-  toggle() {
+  async open() {
     if (!this.bt.state()) {
-      this.bt.open();
+      await this.bt.open();
+      this.log('Connecting');
       this.onConnChange('connecting');
-    } else this.bt.close();
-  }
-  send(text) {
-    this.bt.send(text);
-  }
-  _discoverFlag(tout) {
-    this.discovering = true;
-    setTimeout(() => {
-      this.discovering = false;
-      this._hub._checkDiscoverEnd();
-    }, tout);
-  }
-  _devbt() {
-    for (let dev of this._hub.devices) {
-      if (dev.conn == Conn.BT) return dev;
     }
-    return null;
+  }
+  async close() {
+    await this.bt.close();
+  }
+  async send(text) {
+    await this.bt.send(text + '\0');
   }
 
   // log
   log(t) {
-    this._hub.log('[this.bt] ' + t);
+    this._hub.log('[BT] ' + t);
   }
   err(e) {
-    this._hub.err('[this.bt] ' + e);
+    this._hub.err('[BT] ' + e);
   }
 }

@@ -1,7 +1,3 @@
-let cfg = {
-  use_pin: false, pin: '', ui_width: 450, theme: 'DARK', maincolor: 'GREEN', font: 'monospace', version: app_version, check_upd: true,
-};
-
 function update_cfg(el) {
   if (el.type == 'text') el.value = el.value.trim();
   let val = (el.type == 'checkbox') ? el.checked : el.value;
@@ -11,30 +7,30 @@ function update_cfg(el) {
   update_theme();
 }
 function save_cfg() {
-  localStorage.setItem('config', JSON.stringify(cfg));
+  localStorage.setItem('app_config', JSON.stringify(cfg));
   localStorage.setItem('hub_config', JSON.stringify(hub.cfg));
 }
 function load_cfg() {
-  if (localStorage.hasOwnProperty('config')) {
+  if (localStorage.hasOwnProperty('app_config')) {
     let skip_save = true;
-    let cfg_r = JSON.parse(localStorage.getItem('config'));
+    let cfg_r = JSON.parse(localStorage.getItem('app_config'));
 
     if (cfg_r.version != cfg.version) {
       cfg_r.version = cfg.version;
       skip_save = false;
       setTimeout(() => alert('Версия ' + app_version + '!\n' + '__NOTES__'), 1000);
     }
-    if (Object.keys(cfg).length == Object.keys(cfg_r).length) {
+    if (Object.keys(cfg).length == Object.keys(cfg_r).length) { // no changes
       cfg = cfg_r;
       if (skip_save) return;
     }
   }
-  localStorage.setItem('config', JSON.stringify(cfg));
+  localStorage.setItem('app_config', JSON.stringify(cfg));
 }
-function load_hcfg() {
+function load_cfg_hub() {
   if (localStorage.hasOwnProperty('hub_config')) {
     let cfg_r = JSON.parse(localStorage.getItem('hub_config'));
-    if (Object.keys(hub.cfg).length == Object.keys(cfg_r).length) {
+    if (Object.keys(hub.cfg).length == Object.keys(cfg_r).length) { // no changes
       hub.cfg = cfg_r;
       return;
     }
@@ -109,17 +105,17 @@ function update_theme() {
   let f = 'var(--font)';
   let f3 = 'var(--font3)';
 
-  EL('local_block').style.display = hub.cfg.use_local ? b : n;
+  display('local_block', hub.cfg.use_local ? b : n);
   EL('local_label').style.color = hub.cfg.use_local ? f : f3;
-  EL('pin_block').style.display = cfg.use_pin ? b : n;
+  display('pin_block', cfg.use_pin ? b : n);
   EL('pin_label').style.color = cfg.use_pin ? f : f3;
 
   /*NON-ESP*/
-  EL('mq_block').style.display = hub.cfg.use_mqtt ? b : n;
+  display('mq_block', hub.cfg.use_mqtt ? b : n);
   EL('mqtt_label').style.color = hub.cfg.use_mqtt ? f : f3;
-  EL('bt_block').style.display = hub.cfg.use_bt ? b : n;
+  display('bt_block', hub.cfg.use_bt ? b : n);
   EL('bt_label').style.color = hub.cfg.use_bt ? f : f3;
-  EL('serial_block').style.display = hub.cfg.use_serial ? b : n;
+  display('serial_block', hub.cfg.use_serial ? b : n);
   EL('serial_label').style.color = hub.cfg.use_serial ? f : f3;
   /*/NON-ESP*/
 }

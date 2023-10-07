@@ -1,25 +1,23 @@
-window.onload = function () {
-  render_main(app_version);
-  EL('title').innerHTML = app_title;
-  let title = 'GyverHub v' + app_version + ' [' + hub.cfg.client_id + '] ' + (isPWA() ? 'PWA ' : '') + (isSSL() ? 'SSL ' : '') + (isLocal() ? 'Local ' : '') + (isESP() ? 'ESP ' : '') + (isApp() ? 'App ' : '');
-  EL('title').title = title;
+window.onload = () => {
+  render_main();
+  EL('hub_stat').innerHTML = 'GyverHub v' + app_version + ' ' + (isPWA() ? 'PWA ' : '') + (isSSL() ? 'SSL ' : '') + (isLocal() ? 'Local ' : '') + (isESP() ? 'ESP ' : '') + (isApp() ? 'App ' : '');
 
   load_cfg();
-  load_hcfg();
-  if (isESP()) hub.cfg.use_local = true;
+  load_cfg_hub();
+  if (isESP()) hub.cfg.use_local = true;  // force local on esp
   update_ip();
   update_theme();
   set_drop();
   key_change();
   handle_back();
   register_SW();
-  if (hub.cfg.use_pin) show_keypad(true);
+  if (cfg.use_pin) show_keypad(true);
   else startup();
 
   function register_SW() {
     /*NON-ESP*/
     if ('serviceWorker' in navigator && !isLocal() && !isApp()) {
-      navigator.serviceWorker.register('/sw.js');
+      navigator.serviceWorker.register('sw.js');
       window.addEventListener('beforeinstallprompt', (e) => deferredPrompt = e);
     }
     /*/NON-ESP*/
@@ -111,22 +109,22 @@ function startup() {
 
   /*NON-ESP*/
   if (isSSL()) {
-    EL('http_only_http').style.display = 'block';
-    EL('http_settings').style.display = 'none';
-    EL('pwa_unsafe').style.display = 'none';
+    display('http_only_http', 'block');
+    display('http_settings', 'none');
+    display('pwa_unsafe', 'none');
   }
   if (isPWA() || isLocal() || isApp()) {
-    EL('pwa_block').style.display = 'none';
+    display('pwa_block', 'none');
   }
-  if (isApp()) EL('app_block').style.display = 'none';
+  if (isApp()) display('app_block', 'none');
 
-  // serial_change();
-
+  serial_check_ports();
   /*/NON-ESP*/
 }
+
+// =================== FUNC ===================
 function discover() {
   for (let dev of hub.devices) {
-    dev.conn = Conn.NONE;
     let id = dev.info.id;
     EL(`device#${id}`).className = "device offline";
     display(`Serial#${id}`, 'none');
@@ -136,105 +134,16 @@ function discover() {
   }
 
   if (isESP()) {
-    let has = false;
+    let esplocal = false;
     for (let dev of hub.devices) {
-      if (window.location.href.includes(dev.info.ip)) has = true;
+      if (window.location.href.includes(dev.info.ip)) esplocal = true;
     }
-    if (!has && checkIP(window_ip())) hub.http.discover_ip(window_ip(), hub.cfg.local_port);
+    if (!esplocal) hub.http.discover_ip(window_ip(), hub.cfg.http_port);
   }
-  hub.discover();
   spinArrows(true);
+  hub.discover();
 }
 function discover_all() {
-  hub.discover_all();
   spinArrows(true);
-}
-
-// events
-hub.mqtt.onConnChange = (state) => {
-  EL('mqtt_ok').style.display = state ? 'inline-block' : 'none';
-}
-hub.bt.onConnChange = (state) => {
-  switch (state) {
-    case 'connecting':
-      EL('bt_device').innerHTML = 'Connecting...';
-      break;
-
-    case 'open':
-      EL('bt_btn').innerHTML = 'Disconnect';
-      EL('bt_device').innerHTML = hub.bt.getName();
-      bt_show_ok(true);
-      break;
-
-    case 'close':
-      EL('bt_btn').innerHTML = 'Connect';
-      EL('bt_device').innerHTML = 'Not Connected';
-      bt_show_ok(false);
-      break;
-
-    case 'error':
-      EL('bt_device').innerHTML = 'Not Connected';
-      bt_show_ok(false);
-      break;
-  }
-}
-
-
-hub.onSaveDevices = () => save_devices();
-hub.onAddDevice = (dev) => addDevice(dev);
-hub.onUpdDevice = (dev) => {
-  /*NON-ESP*/
-  if (dev.icon.length) EL(`icon#${dev.id}`).innerHTML = dev.icon;
-  /*/NON-ESP*/
-  EL(`name#${dev.id}`).innerHTML = dev.name ? dev.name : 'Unknown';
-  EL(`device#${dev.id}`).title = `${dev.id} [${dev.prefix}]`;
-}
-hub.onConnectionChange = (id, state) => {
-  if (id == focused) errorBar(!state);
-}
-hub.onWaitAnswer = (id, state) => {
-  if (id == focused) spinArrows(state);
-}
-hub.onPingLost = (id) => {
-  if (id == focused) hub.dev(id).post(screen == 'device' ? 'focus' : screen);
-}
-hub.onDiscoverEnd = () => {
-  if (screen == 'main') spinArrows(false);
-}
-hub.onPacket = (id, type, data, conn) => {
-  switch (type) {
-    case 'discover':
-      EL(`device#${id}`).className = "device";
-      EL(`${Conn.names[conn]}#${id}`).style.display = 'inline-block';
-      break;
-
-    case 'ui':
-      showControls(data.controls, false, conn, hub.devinf(id).ip);
-      break;
-
-    case 'data':
-      // RAW DATA
-      break;
-
-    case 'alert':
-      release_all();
-      alert(data.text);
-      break;
-
-    case 'notice':
-      showPopup(data.text, intToCol(data.color));
-      break;
-
-    case 'ERR':
-      showPopupError(data.text);
-      break;
-
-    case 'push':
-      let date = (new Date).getTime();
-      if (date - push_timer > 3000) {
-        push_timer = date;
-        showNotif(data.text, hub.devinf(id).name);
-      }
-      break;
-  }
+  hub.discover_all();
 }

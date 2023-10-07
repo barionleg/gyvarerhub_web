@@ -1,18 +1,17 @@
-function render_main(v) {
+// =========== MAIN ===========
+function render_main() {
   head_cont.innerHTML = `
   <div class="title" id="title_cont">
     <div class="title_inn">
       <div id="title_row" class="title_row" onclick="back_h()">
         <span class="icon i_hover back_btn" id="back"></span>
-        <span><span id="title"></span><sup id="conn"></sup><span class='version' id='version'>${v}</span></span>
+        <span><span id="title">${app_title}</span><sup id="conn"></sup></span>
+        <div id="conn_icons">
+          <span id='bt_ok' class="icon cfg_icon icon_ok"></span>
+          <span id='mqtt_ok' class="icon cfg_icon icon_ok"></span>
+          <span id='serial_ok' class="icon cfg_icon icon_ok"></span>
+        </div>
       </div>
-
-      <div id="conn_icons" style="display:flex">
-        <span id='mqtt_ok' style="display:none;margin:0" class="icon cfg_icon"></span>
-        <span id='serial_ok' style="display:none;margin:0" class="icon cfg_icon"></span>
-        <span id='bt_ok' style="display:none;margin:0" class="icon cfg_icon"></span>
-      </div>
-
       <div class="head_btns">
         <span class="icon i_hover" id='icon_refresh' onclick="refresh_h()"></span>
         <span class="icon i_hover" id='icon_cfg' style="display:none" onclick="config_h()"></span>
@@ -25,7 +24,7 @@ function render_main(v) {
   test_cont.innerHTML = `
   <div class="test_text">А тут пока ничего нет. Но будет онлайн-тест интерфейса, в котором можно будет поиграться и проверить свой билд без загрузки прошивки</div>
   `;
-  
+
   projects_cont.innerHTML = `
   <div class="projects_inn">
     <div id="projects" class="projects"></div>
@@ -48,7 +47,7 @@ function render_main(v) {
     <div class="cli_area" id="cli"></div>
     <div class="cli_row">
       <span class="icon cli_icon"></span>
-      <input type="text" class="cfg_inp cli_inp" id="cli_input" onkeydown="checkCLI()">
+      <input type="text" class="cfg_inp cli_inp" id="cli_input" onkeydown="checkCLI(event)">
       <button class="icon cfg_btn cli_icon cli_enter" onclick="sendCLI()"></button>
     </div>
   </div>
@@ -72,7 +71,8 @@ function render_main(v) {
       <div id="menu_user"></div>
       <div>
         <div id="menu_info" class="menu_item" onclick="info_h()">Info</div>
-        <div id="menu_fsbr" class="menu_item" onclick="fsbr_h()">File & OTA</div>
+        <div id="menu_fsbr" class="menu_item" onclick="fsbr_h()">File</div>
+        <div id="menu_ota" class="menu_item" onclick="ota_h()">OTA</div>
       </div>
     </div>
   </div>
@@ -94,12 +94,12 @@ function render_main(v) {
         </div>
         <div class="cfg_row">
           <label>Break Widgets</label>
-          <label class="switch"><input type="checkbox" id="info_break_sw" onchange="devices[focused].break_widgets=this.checked;save_devices()">
+          <label class="switch"><input type="checkbox" id="info_break_sw" onchange="hub.dev(focused).info.break_widgets=this.checked;save_devices()">
           <span class="slider"></span></label>
         </div>
         <div class="cfg_row">
           <label>Show names</label>
-          <label class="switch"><input type="checkbox" id="info_names_sw" onchange="devices[focused].show_names=this.checked;save_devices()">
+          <label class="switch"><input type="checkbox" id="info_names_sw" onchange="hub.dev(focused).info.show_names=this.checked;save_devices()">
           <span class="slider"></span></label>
         </div>
         <div class="cfg_row">
@@ -167,21 +167,6 @@ function render_main(v) {
     <div id="fsbr" class="main_col">
       <div class="cfg_col">
         <div class="cfg_row cfg_head">
-          <label><span class="icon cfg_icon"></span>FS Browser</label>
-        </div>
-        <div id="fs_browser">
-          <div id="fsbr_inner"></div>
-          <div class="cfg_row">
-            <div>
-              <button id="fs_format" onclick="format_h()" class="c_btn btn_mini">Format</button>
-              <button id="fs_update" onclick="updatefs_h()" class="c_btn btn_mini">Refresh</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="cfg_col">
-        <div class="cfg_row cfg_head">
           <label><span class="icon cfg_icon"></span>Upload to</label>
         </div>
         <div id="fs_upload">
@@ -192,6 +177,23 @@ function render_main(v) {
           </div>
         </div>
       </div>
+      <div class="cfg_col">
+        <div class="cfg_row cfg_head">
+          <label><span class="icon cfg_icon"></span>FS Browser</label>
+        </div>
+        <div id="fs_browser">
+          <div id="fsbr_inner"></div>
+          <div class="cfg_row">
+            <div>
+              <button id="fs_format" onclick="format_h()" class="c_btn btn_mini">Format</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="ota" class="main_col">
 
       <div class="cfg_col">
         <div class="cfg_row cfg_head">
@@ -229,14 +231,6 @@ function render_main(v) {
     </div>
 
     <div id="config" class="cfg_in">
-      <div class="cfg_col">
-        <div class="cfg_row cfg_head">
-          <label class="cfg_label"><span class="icon cfg_icon"></span>Search</label>
-          <div>
-            <button class="icon cfg_btn_tab" onclick="discover_all();back_h();" title="Find new devices"></button>
-          </div>
-        </div>
-      </div>
 
       <div class="cfg_col">
         <div class="cfg_row cfg_head cfg_clickable" onclick="use_local.click()">
@@ -265,8 +259,8 @@ function render_main(v) {
             </div>
 
             <div class="cfg_row">
-              <label>Port (WS+1)</label>
-              <div class="cfg_inp_row cfg_inp_row_fix"><input class="cfg_inp" type="text" id="local_port" onchange="update_cfg(this)"></div>
+              <label>HTTP port</label>
+              <div class="cfg_inp_row cfg_inp_row_fix"><input class="cfg_inp" type="text" id="http_port" onchange="update_cfg(this)"></div>
             </div>
             
             <div class="cfg_row">
@@ -315,18 +309,21 @@ function render_main(v) {
             <div class="cfg_inp_row cfg_inp_row_fix"><input class="cfg_inp" type="password" id="mq_pass" onchange="update_cfg(this);hub.mqtt.stop()">
             </div>
           </div>
-          <div class="cfg_btn_row">
-            <button class="c_btn btn_mini" onclick="hub.mqtt.start()">Connect</button>
-            <button class="c_btn btn_mini" onclick="hub.mqtt.stop()">Disconnect</button>
+          <div class="cfg_row">
+            <div></div>
+            <div class="cfg_btn_row">
+              <button class="c_btn btn_mini" onclick="hub.mqtt.start()" id="mq_start">Connect</button>
+              <button class="c_btn btn_mini" onclick="hub.mqtt.stop()" id="mq_stop" style="display:none">Disconnect</button>
+            </div>
           </div>
 
         </div>
       </div>
       
-      <div class="cfg_col" id="serial_col" ${("serial" in navigator) ? '' : 'style="display:none"'}>
+      <div class="cfg_col" id="serial_col" ${hasSerial() ? '' : 'style="display:none"'}>
         <div class="cfg_row cfg_head cfg_clickable" onclick="use_serial.click()">
           <label class="cfg_label cfg_clickable" id="serial_label"><span class="icon cfg_icon"></span>Serial</label>
-          <input type="checkbox" id="use_serial" onchange="serial_change();update_cfg(this)" style="display:none">
+          <input type="checkbox" id="use_serial" onchange="serial_toggle(this.checked);update_cfg(this)" style="display:none">
         </div>
 
         <div id="serial_block" style="display:none">
@@ -335,16 +332,21 @@ function render_main(v) {
             <select class="cfg_inp c_inp_block с_inp_fix" id='baudrate' onchange="update_cfg(this)"></select>
           </div>
           <div class="cfg_row">
+            <label class="cfg_label">Time offset</label>
+            <div class="cfg_inp_row cfg_inp_row_fix"><input class="cfg_inp" type="text" id="serial_offset" onchange="update_cfg(this)"></div>
+          </div>
+          <div class="cfg_row">
             <label class="cfg_label">Port</label>
             <div class="cfg_btn_row">
-              <button class="c_btn btn_mini" onclick="serial_select()">Select</button>
-              <button id="serial_btn" class="c_btn btn_mini" onclick="serial_toggle()">Connect</button>
+              <button class="c_btn btn_mini" onclick="hub.serial.select()">Select</button>
+              <button id="serial_open" class="c_btn btn_mini" onclick="hub.serial.open()" style="display:none">Connect</button>
+              <button id="serial_close" class="c_btn btn_mini" onclick="hub.serial.close()" style="display:none">Disconnect</button>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="cfg_col" id="bt_col" ${("bluetooth" in navigator) ? '' : 'style="display:none"'}>
+      <div class="cfg_col" id="bt_col" ${hasBT() ? '' : 'style="display:none"'}>
         <div class="cfg_row cfg_head cfg_clickable" onclick="use_bt.click()">
           <label class="cfg_label cfg_clickable" id="bt_label"><span class="icon cfg_icon"></span>Bluetooth</label>
           <input type="checkbox" id="use_bt" onchange="update_cfg(this)" style="display:none">
@@ -353,12 +355,24 @@ function render_main(v) {
         <div id="bt_block" style="display:none">
           <div class="cfg_row">
             <label class="cfg_label" id="bt_device">Not Connected</label>
-            <button id="bt_btn" class="c_btn btn_mini" onclick="hub.bt.toggle()">Connect</button>
+            <div class="cfg_btn_row">
+              <button id="bt_open" class="c_btn btn_mini" onclick="hub.bt.open()">Connect</button>
+              <button id="bt_close" class="c_btn btn_mini" onclick="hub.bt.close()" style="display:none">Disconnect</button>
+            </div>
           </div>
         </div>
 
       </div>
       <!--/NON-ESP-->
+
+      <div class="cfg_col">
+        <div class="cfg_row cfg_head">
+          <label class="cfg_label"><span class="icon cfg_icon"></span>Search</label>
+          <div>
+            <button class="icon cfg_btn_tab" onclick="discover_all();back_h();" title="Find new devices"></button>
+          </div>
+        </div>
+      </div>
 
       <div class="cfg_col">
         <div class="cfg_row cfg_head">
@@ -455,12 +469,14 @@ function render_main(v) {
       </div>
 
       <div class="cfg_col">
+        <div class="cfg_info" id="hub_stat"></div>
         <div class="cfg_info">
           Contribution:
           <a href="https://github.com/Simonwep/pickr" target="_blank">Pickr</a>
           <a href="https://github.com/mqttjs/MQTT.js" target="_blank">MQTT.js</a>
           <a href="https://github.com/ghornich/sort-paths" target="_blank">sort-paths</a>
           <a href="https://fontawesome.com/v5/search?o=r&m=free&s=solid" target="_blank">Fontawesome</a>
+          <a href="https://github.com/loginov-rocks/Web-Bluetooth-Terminal" target="_blank">Bluetooth Terminal</a>
         </div>
       </div>
     </div>
@@ -494,6 +510,8 @@ function render_main(v) {
   <div id="bottom_space"></div>
   `;
 }
+
+// =========== MISC ===========
 function render_selects() {
   /*NON-ESP*/
   for (let baud of baudrates) {
@@ -538,11 +556,7 @@ function render_info() {
     </div>`;
   }
 }
-function render_devices() {
-  EL('devices').innerHTML = '';
-  for (let dev of hub.devices) addDevice(dev.info);
-}
-function addDevice(dev) {
+function add_device(dev) {
   let icon = (!isESP() && dev.icon.length) ? `<span class="icon icon_min" id="icon#${dev.id}">${dev.icon}</span>` : '';
   EL('devices').innerHTML += `<div class="device offline" id="device#${dev.id}" onclick="device_h('${dev.id}')" title="${dev.id} [${dev.prefix}]">
   <div class="device_inner">
@@ -553,4 +567,110 @@ function addDevice(dev) {
       <div class="icon d_delete" onclick="delete_h('${dev.id}')"></div>
     </div>
   </div>`;
+}
+function render_devices() {
+  EL('devices').innerHTML = '';
+  for (let dev of hub.devices) add_device(dev.info);
+}
+
+// ============= UI =============
+let popupT1 = null, popupT2 = null;
+function showPopup(text, color = '#37a93c') {
+  if (popupT1) clearTimeout(popupT1);
+  if (popupT2) clearTimeout(popupT2);
+  EL('notice').innerHTML = text;
+  EL('notice').style.background = color;
+  display('notice', 'block');
+  EL('notice').style.animation = "fade-in 0.5s forwards";
+  popupT1 = setTimeout(() => { popupT1 = null; display('notice', 'none'); }, 3500);
+  popupT2 = setTimeout(() => { popupT2 = null; EL('notice').style.animation = "fade-out 0.5s forwards" }, 3000);
+}
+function showPopupError(text) {
+  showPopup(text, '#a93737');
+}
+function errorBar(v) {
+  EL('head_cont').style.background = v ? 'var(--err)' : 'var(--prim)';
+}
+function spinArrows(val) {
+  if (val) EL('icon_refresh').classList.add('spinning');
+  else EL('icon_refresh').classList.remove('spinning');
+}
+function waiter(size = 50, col = 'var(--prim)', block = true) {
+  return `<div class="waiter ${block ? 'waiter_b' : ''}"><span style="font-size:${size}px;color:${col}" class="icon spinning"></span></div>`;
+}
+function setWlabel(name, text) {
+  let lb = EL('wlabel#' + name);
+  if (lb) lb.innerHTML = text;
+}
+
+// ============= CONNECTION =============
+function mq_change(opened) {
+  display('mq_start', opened ? 'none' : 'inline-block');
+  display('mq_stop', opened ? 'inline-block' : 'none');
+}
+
+function bt_show_ok(state) {
+  display('bt_ok', state ? 'inline-block' : 'none');
+}
+function bt_change(opened) {
+  display('bt_open', opened ? 'none' : 'inline-block');
+  display('bt_close', opened ? 'inline-block' : 'none');
+}
+
+function serial_show_ok(state) {
+  display('serial_ok', state ? 'inline-block' : 'none');
+}
+function serial_change(opened) {
+  display('serial_open', opened ? 'none' : 'inline-block');
+  display('serial_close', opened ? 'inline-block' : 'none');
+}
+async function serial_toggle(state) {
+  serial_show_ok(false);
+  serial_change(false);
+  if (!state) hub.serial.close();
+  serial_check_ports();
+}
+async function serial_check_ports() {
+  if (!hasSerial()) return;
+  const ports = await navigator.serial.getPorts();
+  display('serial_open', ports.length ? 'inline-block' : 'none');
+}
+
+// ============= INFO =============
+function showInfo(info) {
+  function addInfo(el, label, value, title = '') {
+    EL(el).innerHTML += `
+    <div class="cfg_row info">
+      <label>${label}</label>
+      <label title="${title}" class="lbl_info">${value}</label>
+    </div>`;
+  }
+  EL('info_version').innerHTML = '';
+  EL('info_net').innerHTML = '';
+  EL('info_memory').innerHTML = '';
+  EL('info_system').innerHTML = '';
+
+  for (let i in info.version) addInfo('info_version', i, info.version[i]);
+  for (let i in info.net) addInfo('info_net', i, info.net[i]);
+  for (let i in info.memory) {
+    if (typeof (info.memory[i]) == 'object') {
+      let used = info.memory[i][0];
+      let total = info.memory[i][1];
+      let mem = (used / 1000).toFixed(1) + ' kB';
+      if (total) mem += ' [' + (used / total * 100).toFixed(0) + '%]';
+      addInfo('info_memory', i, mem, `Total ${(total / 1000).toFixed(1)} kB`);
+    } else addInfo('info_memory', i, info.memory[i]);
+  }
+  for (let i in info.system) {
+    if (i == 'Uptime') {
+      let sec = info.system[i];
+      let upt = Math.floor(sec / 86400) + ':' + new Date(sec * 1000).toISOString().slice(11, 19);
+      let d = new Date();
+      let utc = d.getTime() - (d.getTimezoneOffset() * 60000);
+      addInfo('info_system', i, upt);
+      addInfo('info_system', 'Started', new Date(utc - sec * 1000).toISOString().split('.')[0].replace('T', ' '));
+      continue;
+    }
+    addInfo('info_system', i, info.system[i]);
+  }
 }

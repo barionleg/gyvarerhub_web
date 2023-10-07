@@ -1,55 +1,46 @@
-/*NON-ESP*/
-class MQTTconn {
-  connecting = false;
-  client = null;
-  discover_f = false;
-  prefs = [];
-  discovering = false;
-  constructor(hub) {
-    this._hub = hub;
-  }
+class MQTTconn extends Discover {
+  tout = 1000;
 
-  // callback
   onConnChange(state) { }
+
+  constructor(hub) {
+    super(hub);
+    setInterval(() => { if (this._hub.cfg.use_mqtt && !this.state() && this._reconnect) this.start() }, 3000);
+  }
 
   // discover
   discover() {
     if (this.discovering) return;
-    if (!this.state()) this.discover_f = true;
-    else {
-      for (let dev of this._hub.devices) {
-        this.send(dev.info.prefix + '/' + dev.info.id, this._hub.cfg.client_id);
-      }
+    if (!this.state()) {
+      this._discover_f = true;
+      return;
     }
-    _discoverFlag(1000);
+    for (let dev of this._hub.devices) {
+      this.send(dev.info.prefix + '/' + dev.info.id, this._hub.cfg.client_id);
+    }
+    this._discoverTimer(this.tout);
   }
   discover_all() {
-    if (this.discovering) return;
-    if (!this.state()) return;
-    this.upd_prefix(this._hub.cfg.prefix);
+    if (this.discovering || !this.state()) return;
+    this._upd_prefix(this._hub.cfg.prefix);
     this.send(this._hub.cfg.prefix, this._hub.cfg.client_id);
-    _discoverFlag(1000);
-  }
-  _discoverFlag(tout) {
-    this.discovering = true;
-    setTimeout(() => {
-      this.discovering = false;
-      this._hub._checkDiscoverEnd();
-    }, tout);
+    this._discoverTimer(this.tout);
   }
 
   // core
   send(topic, msg = '') {
-    if (this.state()) this.client.publish(topic, msg);  // no '\0'
+    if (this.state()) this._client.publish(topic, msg);  // no '\0'
   }
   state() {
-    return (this.client && this.client.connected);
+    return (this._client && this._client.connected);
   }
   stop() {
-    if (this.state()) this.client.end();
+    this._reconnect = false;
+    if (this.state()) this._client.end();
   }
   start() {
-    if (this.connecting || this.state() || !this._hub.cfg.mq_host || !this._hub.cfg.mq_port || !this._hub.cfg.use_mqtt) return;
+    this._reconnect = true;
+    if (this._connecting || this.state() || !this._hub.cfg.mq_host || !this._hub.cfg.mq_port || !this._hub.cfg.use_mqtt) return;
 
     const url = 'wss://' + this._hub.cfg.mq_host + ':' + this._hub.cfg.mq_port + '/mqtt';
     const options = {
@@ -66,84 +57,95 @@ class MQTTconn {
 
     try {
       this.log('Connecting');
-      this.client = mqtt.connect(url, options);
+      this._client = mqtt.connect(url, options);
     } catch (e) {
       this.err('Connection fail');
-      this.onConnChange(0);
+      this.onConnChange(false);
       return;
     }
 
-    this.connecting = true;
+    this._connecting = true;
 
-    this.client.on('connect', () => {
-      this.connecting = false;
+    this._client.on('connect', () => {
+      this._connecting = false;
       this.log('Connected');
-      this.onConnChange(1);
-      this.prefs = [];
-      this.upd_prefix(this._hub.cfg.prefix);
-      for (let dev of this._hub.devices) this.sub_device(dev.info.prefix, dev.info.id);
+      this.onConnChange(true);
+      this._preflist = [];
+      this._upd_prefix(this._hub.cfg.prefix);
+      for (let dev of this._hub.devices) this._sub_device(dev.info.prefix, dev.info.id);
 
-      if (this.discover_f) {
-        this.discover_f = false;
+      if (this._discover_f) {
+        this._discover_f = false;
         this.discover();
       }
     });
 
-    this.client.on('error', () => {
-      this.connecting = false;
-      this.onConnChange(0);
-      this.client.end();
+    this._client.on('error', () => {
+      this._connecting = false;
+      this.onConnChange(false);
+      this._client.end();
       this.err('Error');
     });
 
-    this.client.on('close', () => {
-      this.connecting = false;
-      this.onConnChange(0);
-      this.client.end();
+    this._client.on('close', () => {
+      this._connecting = false;
+      this.onConnChange(false);
+      this._client.end();
       this.log('Close');
     });
 
-    this.client.on('message', (topic, text) => {
+    this._client.on('message', (topic, text) => {
       topic = topic.toString();
       text = text.toString();
       let parts = topic.split('/');
       if (parts.length < 2) return;
 
-      for (let pref of this.prefs) {
+      for (let pref of this._preflist) {
         if (parts[0] != pref || parts[1] != 'hub') continue;
 
         // prefix/hub
         if (parts.length == 2) {
-          this._hub.parse(Conn.MQTT, text, null);
+          this._hub._parsePacket(Conn.MQTT, text);
           return;
 
           // prefix/hub/client_id/id
         } else if (parts.length == 4 && parts[2] == this._hub.cfg.client_id) {
           let dev = this._hub.dev(parts[3]);
-          if (dev) dev.checkPacket(Conn.MQTT, text);
-          else this._hub.parse(Conn.MQTT, text, null);
+          if (dev) dev.mq_buf.process(text);
+          else this._hub._parsePacket(Conn.MQTT, text);
           return;
 
           // prefix/hub/id/get/name
         } else if (parts.length == 5 && parts[3] == 'get') {
-          this._hub.onUpdate(parts[2], parts[4], text);
+          let dev = this._hub.dev(parts[2]);
+          if (dev && !dev._checkUpdate(parts[4])) {
+            this._hub.onUpdate(parts[2], parts[4], text);
+          }
           return;
         }
       }
     });
   }
-  sub_device(prefix, id) {
+  
+  _sub_device(prefix, id) {
     if (!this.state()) return;
-    this.client.subscribe(prefix + '/hub/' + id + '/get/#');
-    this.upd_prefix(prefix);
+    this._client.subscribe(prefix + '/hub/' + id + '/get/#');
+    this._upd_prefix(prefix);
   }
-  upd_prefix(prefix) {
-    if (!this.prefs.includes(prefix)) {
-      this.prefs.push(prefix);
-      this.client.subscribe(prefix + '/hub');
-      this.client.subscribe(prefix + '/hub/' + this._hub.cfg.client_id + '/#');
+  _upd_prefix(prefix) {
+    if (!this._preflist.includes(prefix)) {
+      this._preflist.push(prefix);
+      this._client.subscribe(prefix + '/hub');
+      this._client.subscribe(prefix + '/hub/' + this._hub.cfg.client_id + '/#');
     }
   }
+
+  _connecting = false;
+  _client = null;
+  _discover_f = false;
+  _preflist = [];
+
+  _reconnect = false;
 
   // log
   log(t) {
@@ -153,4 +155,3 @@ class MQTTconn {
     this._hub.err('[MQTT] ' + e);
   }
 };
-/*/NON-ESP*/

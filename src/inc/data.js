@@ -1,16 +1,67 @@
+// ====================== CONST ======================
 const app_title = 'GyverHub';
 const non_esp = '__ESP__';
 const non_app = '__APP__';
 const app_version = '__VER__';
+const hub = new GyverHub();
 
-const log_enable = true;
-const log_network = false;
+const colors = {
+  ORANGE: 0xd55f30,
+  YELLOW: 0xd69d27,
+  GREEN: 0x37A93C,
+  MINT: 0x25b18f,
+  AQUA: 0x2ba1cd,
+  BLUE: 0x297bcd,
+  VIOLET: 0x825ae7,
+  PINK: 0xc8589a,
+};
+const fonts = [
+  'monospace',
+  'system-ui',
+  'cursive',
+  'Arial',
+  'Verdana',
+  'Tahoma',
+  'Trebuchet MS',
+  'Georgia',
+  'Garamond',
+];
+const themes = {
+  DARK: 0,
+  LIGHT: 1
+};
+const baudrates = [
+  4800, 9600, 19200, 38400, 57600, 74880, 115200, 230400, 250000, 500000, 1000000, 2000000
+];
+const theme_cols = [
+  // back/tab/font/font2/dark/thumb/black/scheme/font4/shad/font3
+  ['#1b1c20', '#26272c', '#eee', '#ccc', '#141516', '#444', '#0e0e0e', 'dark', '#222', '#000'],
+  ['#eee', '#fff', '#111', '#333', '#ddd', '#999', '#bdbdbd', 'light', '#fff', '#000000a3']
+];
 
+// ====================== VARS ======================
+let deferredPrompt = null;
+let screen = 'main';
+let cfg_changed = false;
+
+let cfg = {
+  serial_offset: 2000,
+  use_pin: false,
+  pin: '',
+  ui_width: 450,
+  theme: 'DARK',
+  maincolor: 'GREEN',
+  font: 'monospace',
+  version: app_version,
+  check_upd: true,
+};
+
+// ====================== CHECK ======================
 function isSSL() {
   return window.location.protocol == 'https:';
 }
 function isLocal() {
-  return window.location.href.startsWith('file') || checkIP(window_ip()) || window_ip() == 'localhost';
+  return window_ip() != '127.0.0.1' && (window.location.href.startsWith('file') || checkIP(window_ip()) || window_ip() == 'localhost');
 }
 function isApp() {
   return !non_app;
@@ -24,7 +75,24 @@ function isESP() {
 function isTouch() {
   return navigator.maxTouchPoints || 'ontouchstart' in document.documentElement;
 }
+function hasSerial() {
+  return "serial" in navigator;
+}
+function hasBT() {
+  return "bluetooth" in navigator;
+}
 
+// ====================== FUNC ======================
+function b64ToText(base64) {
+  const binString = atob(base64);
+  return new TextDecoder().decode(Uint8Array.from(binString, (m) => m.codePointAt(0)));
+}
+function confirmDialog(msg) {
+  return new Promise(function (resolve, reject) {
+    let confirmed = window.confirm(msg);
+    return confirmed ? resolve(true) : reject(false);
+  });
+}
 String.prototype.hashCode = function () {
   if (!this.length) return 0;
   let hash = new Uint32Array(1);
@@ -57,11 +125,6 @@ function getMime(name) {
   if (ext in mime_table) return mime_table[ext];
   else return 'text/plain';
 }
-function log(text) {
-  let texts = text.toString();
-  if (!log_network && (texts.includes('discover') || texts.startsWith('Post') || texts.startsWith('Got'))) return;
-  console.log(text);
-}
 function openURL(url) {
   window.open(url, '_blank').focus();
 }
@@ -77,8 +140,28 @@ function colToInt(str) {
 function random(min, max) {
   return Math.floor(Math.random() * (max - min + 1) + min)
 }
+function parseCSV(str) {
+  // https://stackoverflow.com/a/14991797
+  const arr = [];
+  let quote = false;
+  for (let row = 0, col = 0, c = 0; c < str.length; c++) {
+    let cc = str[c], nc = str[c + 1];
+    arr[row] = arr[row] || [];
+    arr[row][col] = arr[row][col] || '';
+    if (cc == '"' && quote && nc == '"') { arr[row][col] += cc; ++c; continue; }
+    if (cc == '"') { quote = !quote; continue; }
+    if (cc == ',' && !quote) { ++col; continue; }
+    if (cc == '\r' && nc == '\n' && !quote) { ++row; col = 0; ++c; continue; }
+    if (cc == '\n' && !quote) { ++row; col = 0; continue; }
+    if (cc == '\r' && !quote) { ++row; col = 0; continue; }
+    arr[row][col] += cc;
+  }
+  return arr;
+}
+
+// ====================== BROWSER ======================
 function notSupported() {
-  alert('Browser not supported');
+  alert('Browser is not supported');
 }
 function browser() {
   if (navigator.userAgent.includes("Opera") || navigator.userAgent.includes('OPR')) return 'opera';
@@ -117,7 +200,7 @@ function display(id, value) {
   EL(id).style.display = value;
 }
 
-// ============ IP ============
+// ====================== NET ======================
 function window_ip() {
   let ip = window.location.href.split('/')[2].split(':')[0];
   return checkIP(ip) ? ip : 'error';

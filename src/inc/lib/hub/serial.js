@@ -1,24 +1,26 @@
-/*NON-ESP*/
 class SerialJS {
-  async onmessage(data) { }
+  async onportchange(selected) { }
   async onopen() { }
+  async onmessage(data) { }
   async onclose() { }
   async onerror(e) { }
-  async onchange(s) { }
 
+  state() {
+    return (this._port != null);
+  }
   async select() {
     await this.close();
     const ports = await navigator.serial.getPorts();
     for (let port of ports) await port.forget();
     try {
       await navigator.serial.requestPort();
-      await this.onchange(true);
+      await this.onportchange(true);
     } catch (e) {
-      this._onerror(e);
-      await this.onchange(false);
+      this.onerror(e);
+      await this.onportchange(false);
     }
   }
-  async start(baud) {
+  async open(baud) {
     try {
       if (this._port) throw "Already open";
       const ports = await navigator.serial.getPorts();
@@ -34,7 +36,7 @@ class SerialJS {
         this.onclose();
       }
     } catch (e) {
-      this._onerror(e);
+      this.onerror(e);
     }
   }
   async close() {
@@ -42,15 +44,19 @@ class SerialJS {
     if (this._reader) await this._reader.cancel();
   }
   async send(text) {
-    if (!this._port) return this._onerror("Not open");
+    if (!this._port) return this.onerror("Not open");
     try {
       const encoder = new TextEncoder();
       const writer = this._port.writable.getWriter();
       await writer.write(encoder.encode(text));
       writer.releaseLock();
     } catch (e) {
-      this._onerror(e);
+      this.onerror(e);
     }
+  }
+  async toggle(baud) {
+    if (this.state()) await this.close();
+    else await this.open(baud);
   }
 
   // private
@@ -58,21 +64,6 @@ class SerialJS {
   _reader = null;
   _closing = false;
 
-  async _start(baud) {
-    if (this._port) throw "Already open";
-    const ports = await navigator.serial.getPorts();
-    if (!ports.length) throw "No port";
-    this._port = ports[0];
-    await this._port.open({ baudRate: baud });
-    try {
-      this.onopen();
-      await this._readLoop();
-    } finally {
-      await this._port.close();
-      this._port = null;
-      this.onclose();
-    }
-  }
   async _readLoop() {
     this._closing = false;
     while (this._port.readable && !this._closing) {
@@ -90,8 +81,4 @@ class SerialJS {
       }
     }
   }
-  _onerror(e) {
-    this.onerror('[Serial] ' + e);
-  }
 }
-/*/NON-ESP*/
